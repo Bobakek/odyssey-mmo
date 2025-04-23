@@ -7,7 +7,7 @@ const ShipStatus: React.FC = () => {
   const { ship } = state.player;
   
   return (
-    <div className="bg-gray-900/70 backdrop-blur-md rounded-md border border-gray-700/50 p-4">
+    <div className="bg-gray-900/70 backdrop-blur-md rounded-md border border-gray-700/50 p-4" style={{ marginTop: '48px' }}>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-bold text-cyan-300">{ship.name}</h2>
         <div className="text-xs bg-blue-900/50 text-blue-300 px-2 py-1 rounded border border-blue-800/50">

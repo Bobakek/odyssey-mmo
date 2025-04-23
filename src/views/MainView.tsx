@@ -239,7 +239,7 @@ const MainView: React.FC = () => {
           </TabsContent>
           
           {/* Ship Tab */}
-          <TabsContent value="ship" className="h-full overflow-auto">
+          <TabsContent value="ship" className="h-full overflow-auto pt-[64px]">
             <ShipStatus />
           </TabsContent>
           

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useGame } from '../../context/GameContext';
 import { Ship } from '../../types';
 import { Shield, Crosshair, Zap, AlertOctagon } from 'lucide-react';
@@ -8,6 +8,9 @@ const CombatView: React.FC = () => {
   const { player, enemies } = state;
   const [selectedWeapon, setSelectedWeapon] = useState<string | null>(null);
   const [selectedTarget, setSelectedTarget] = useState<Ship | null>(null);
+    
+
+  const attackIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [cooldowns, setCooldowns] = useState<Record<string, number>>({});
 
   // Handle weapon firing
@@ -68,7 +71,7 @@ const CombatView: React.FC = () => {
           }
         });
 
-        return hasChanges ? newCooldowns : prev;
+          return hasChanges ? newCooldowns : prev;
       });
     }, 100);
 
@@ -78,15 +81,20 @@ const CombatView: React.FC = () => {
   // Enemy AI
   useEffect(() => {
     if (!enemies || enemies.length === 0) return;
+        // Auto-select first enemy and first weapon
+        if (!selectedTarget && enemies.length > 0) {
+            setSelectedTarget(enemies[0]);
+        }
+        if (!selectedWeapon && player.ship.weapons.length > 0) {
+            setSelectedWeapon(player.ship.weapons[0].id);
+        }
 
     const aiTimer = setInterval(() => {
       enemies.forEach(enemy => {
         if (enemy.hull <= 0) return;
-
+        const damage = enemy.weapons[0]?.damage || 5;
         // Simple AI: randomly choose to attack
         if (Math.random() < 0.3) {
-          const damage = enemy.weapons[0]?.damage || 5;
-          
           dispatch({
             type: 'DAMAGE_SHIP',
             payload: { amount: damage }
@@ -99,12 +107,48 @@ const CombatView: React.FC = () => {
               type: 'danger'
             }
           });
+          // Auto-counterattack
+          const availableWeapon = player.ship.weapons.find(weapon => cooldowns[weapon.id] === undefined || cooldowns[weapon.id] <= 0);
+          if (availableWeapon) {
+            handleWeaponFire(availableWeapon.id, enemy);
+          }
         }
+       
       });
     }, 2000);
-
+   
     return () => clearInterval(aiTimer);
-  }, [enemies, dispatch]);
+  }, [enemies, dispatch, selectedTarget, selectedWeapon, player.ship.weapons]);
+
+    // Auto-attack when target and weapon are selected
+    useEffect(() => {
+        if (selectedTarget && selectedWeapon) {
+            // Clear any existing interval
+            if (attackIntervalRef.current) {
+                clearInterval(attackIntervalRef.current);
+            }
+
+            const weapon = player.ship.weapons.find(w => w.id === selectedWeapon);
+            if (weapon) {
+                attackIntervalRef.current = setInterval(() => {
+                    if (selectedTarget && selectedTarget.hull > 0 && cooldowns[selectedWeapon] === undefined || cooldowns[selectedWeapon] <= 0) {
+                        handleWeaponFire(selectedWeapon, selectedTarget);
+                    }
+                }, 100);
+            }
+        } else if (attackIntervalRef.current) {
+            // Clear the interval if no target or no selected weapon
+            clearInterval(attackIntervalRef.current);
+            attackIntervalRef.current = null;
+        }
+
+        // Cleanup interval on unmount
+        return () => {
+            if (attackIntervalRef.current) {
+                clearInterval(attackIntervalRef.current);
+            }
+        };
+    }, [selectedTarget, selectedWeapon, cooldowns, handleWeaponFire]);
 
   if (!state.inCombat || !enemies) return null;
 
@@ -209,9 +253,7 @@ const CombatView: React.FC = () => {
                     }`}
                     onClick={() => {
                       setSelectedTarget(enemy);
-                      if (selectedWeapon) {
-                        handleWeaponFire(selectedWeapon, enemy);
-                      }
+                     
                     }}
                     disabled={!selectedWeapon || enemy.hull <= 0}
                   >
@@ -259,20 +301,44 @@ const CombatView: React.FC = () => {
           </div>
         </div>
 
+        {/* Fire Button */}\
+        {selectedWeapon && selectedTarget && (
+                <button
+                className="w-full mt-4 p-2 rounded border transition-colors bg-red-900/50 text-red-300 border-red-800/50 hover:bg-red-900/70"
+                onClick={() => handleWeaponFire(selectedWeapon, selectedTarget)}
+                disabled={!selectedWeapon || !selectedTarget || selectedTarget.hull <= 0}
+                >
+                    <div className="flex items-center justify-center gap-1">
+                        <Zap size={14} />
+                       Fire!
+                    </div>
+                </button>
+            )}
         {/* Combat Actions */}
         <div className="mt-6 flex justify-end gap-3">
           <button 
             className="px-4 py-2 bg-yellow-900/40 hover:bg-yellow-900/60 text-yellow-300 rounded border border-yellow-800/50"
             onClick={() => {
-              // Add escape logic here
-              dispatch({ type: 'END_COMBAT' });
-              dispatch({
-                type: 'ADD_NOTIFICATION',
-                payload: {
-                  message: 'Successfully escaped from combat!',
-                  type: 'warning'
+                const escapeChance = Math.random();
+
+                if (escapeChance > 0.5) {
+                    dispatch({ type: 'END_COMBAT' });
+                    dispatch({
+                        type: 'ADD_NOTIFICATION',
+                        payload: {
+                            message: 'You have successfully escaped!',
+                            type: 'warning'
+                        }
+                    });
+                } else {
+                    dispatch({
+                        type: 'ADD_NOTIFICATION',
+                        payload: {
+                            message: 'Escape failed!',
+                            type: 'danger'
+                        }
+                    });
                 }
-              });
             }}
           >
             Attempt Escape
